@@ -63,7 +63,7 @@ void keyPressed() {
     }
   }
 
-  if (keyCode == DELETE || key == '-') {
+  if (keyCode == DELETE || (key == BACKSPACE && !elementSelect)) {
     int k = MS.detectOver();
     if (k > -1) {
       MS.remove(k);
