@@ -791,30 +791,556 @@ class Matrix {
   }  
   Matrix upTri(boolean detPreserving) {
     Matrix Mat = Copy();
-    int x = 0, y = 0;
-    while (x<n && y<m) {
+    int x = 0, y = 0, ct = 0;
+    while (x<n && y<m && ct<m) {
       //CREATE UPPER TRIANGULAR MATRIX VIA ROW OPERATIONS
       if (Mat.M[x][y] == 0) {
         y++;
         if (y==m) {
           x++;
-          y=x;
+          y = ct;
         }
-      } else if (x == y) {
+      } else if (y <= ct) {
+        ct++;
         for (int i = y+1; i<m; i++) {
-          Mat.rComb(i, y, -1.0*Mat.M[x][i]/Mat.M[x][y]);
+          Mat.rComb(i, y, -Mat.M[x][i]*1.0/Mat.M[x][y]);
         }
         x++;
-        y=x;
+        y = ct;
       } else {
-        Mat.rSwap(x, y);
+        Mat.rSwap(ct, y);
         if (detPreserving) {
-          Mat.rScl(x, -1);
+          Mat.rScl(ct, -1);
         }
-        y = 0;
+        y = ct;
+      }
+    }
+    return Mat.add(O());
+  }
+  Matrix ref() {
+    Matrix Mat = Copy();
+    int x = 0, y = 0, ct = 0;
+    while (x<n && y<m && ct<m) {
+      if (Mat.M[x][y] == 0) {
+        y++;
+        if (y==m) {
+          x++;
+          y = ct;
+        }
+      } else if (y <= ct) {
+        Mat.rScl(y, 1/Mat.M[x][y]);
+        ct++;
+        for (int i = y+1; i<m; i++) {
+          Mat.rComb(i, y, -Mat.M[x][i]);
+        }
+        x++;
+        y = ct;
+      } else {
+        Mat.rSwap(ct, y);
+        y = ct;
+      }
+    }
+    return Mat.add(Mat.O());
+  }
+  Matrix rref() {
+    Matrix Mat = ref();
+    int x = min(n-1, m-1), y = m-1;
+    while (x>0 && y>=0) {
+      if (Mat.M[x][y] == 0) {
+        x++;
+        if (x==n) {
+          y--;
+          x = min(n-1, y);
+        }
+      } else {
+        for (int i = y-1; i>=0; i--) {
+          Mat.rComb(i, y, -Mat.M[x][i]);
+        }
+        y--;
+        x = y;
+      }
+    }
+    return Mat.add(Mat.O());
+  }
+  //ROW OPERATIONS
+  void rScl(int ind, double f) {
+    int index = max(0, min(ind, m-1));
+    for (int k = 0; k<n; k++) {
+      M[k][index] *= f;
+    }
+  }
+  void rSwap(int ind1, int ind2) {
+    if (ind1==ind2) {
+      return;
+    }
+    if (ind1<0||ind2<0||ind1>=m||ind2>=m) {
+      println("INDEX OUT OF RANGE");
+      return;
+    }
+    double[] nums = new double[n];
+    for (int i = 0; i<n; i++) {
+      nums[i] = M[i][ind1];
+    }
+    for (int i = 0; i<n; i++) {
+      M[i][ind1] = M[i][ind2];
+    }
+    for (int i = 0; i<n; i++) {
+      M[i][ind2] = nums[i];
+    }
+  }
+  void rComb(int ind1, double f1, int ind2, double f2) {
+    if (ind1<0||ind2<0||ind1>=m||ind2>=m) {
+      //println("INDEX OUT OF RANGE");
+      return;
+    }
+    if (ind1==ind2) {
+      rScl(ind1, f1);
+      return;
+    }
+    if (f2==0) {
+      rScl(ind1, f1);
+      return;
+    }
+    for (int i = 0; i<n; i++) {
+      M[i][ind1] *= f1;
+      M[i][ind1] += f2*M[i][ind2];
+    }
+  }
+  void rComb(int ind1, int ind2, double f1) {
+    if (f1 == 0) {
+      return;
+    }
+    if (ind1==ind2) {
+      rScl(ind1, f1);
+      return;
+    }
+    rComb(ind1, 1, ind2, f1);
+  }
+
+  Matrix diag() {
+    Matrix Mat = new Matrix(min(n, m));
+    for (int i = 0; i<min(n, m); i++) {
+      Mat.M[i][i] = this.M[i][i];
+    }
+    return Mat;
+  }
+
+  double det() {
+    if (isSquare()) {
+      Matrix Mat = upTri(true);
+      double D = 1;
+      for (int i = 0; i<n; i++) {
+        D *= Mat.M[i][i];
+      }
+      if (D==0) {
+        return 0;
+      }
+      return D;
+    } else {
+      //println("NOT SQUARE -> DETERMINANT UNDEFINED");
+      return 0;
+    }
+  }
+
+  Matrix inv() {
+    return inv(false);
+  }
+  Matrix inv(boolean detScl) {
+    if (!isSquare()) {
+      //println("NOT SQUARE");
+      return O();
+    } else if (invertible()) {
+      Matrix Mat = Copy();
+      Mat = Mat.augmentRight(Mat.I());
+      Mat = Mat.rref();
+      if (detScl) {
+        return Mat.cutRight(this.n).scl(this.det()).rnd(true);
+      }
+      return Mat.cutRight(this.n);
+    } else {
+      //println("SINGULAR");
+      return O();
+    }
+  }
+
+  Matrix pow(int k) {
+    Matrix Mat = this;
+    if (k==0 && isSquare()) {
+      return Mat.I();
+    } else if (k == 1 && isSquare()) {
+      return Mat;
+    } else if (isSquare() && k<0) {
+      return Mat.inv().pow(-k);
+    } else if (isSquare()) {
+      return Mat.mult(Mat.pow(k-1));
+    } else {
+      //println("NOT SQUARE");
+      return O();
+    }
+  }
+
+  Matrix T() {
+    Matrix Mat = new Matrix(n, m);
+    for (int i = 0; i < m*n; i++) {
+      Mat.M[i/n][i%n] = M[i%n][i/n];
+    }
+    return Mat;
+  }
+
+  Matrix I() {
+    Matrix N = new Matrix(m, n);
+    for (int j = 0; j < min(m, n); j++) {
+      N.M[j][j] = 1;
+    }
+    return N;
+  }
+
+  void setI() {
+    setO();
+    for (int j = 0; j < min(m, n); j++) {
+      M[j][j] = 1;
+    }
+  }
+
+  Matrix aug(Matrix N) {
+    return augmentRight(N);
+  }
+  Matrix aug(Vector v) {
+    return augmentRight(v.V);
+  }
+  Matrix augmentRight(Matrix N) {
+    if (m != N.m) {
+      //println("WRONG DIMENSIONS");
+      return O();
+    }
+    Matrix Mat = new Matrix(m, n+N.n);
+    for (int y = 0; y<Mat.m; y++) {
+      for (int x = 0; x<Mat.n; x++) {
+        if (x<n) {
+          Mat.M[x][y] = M[x][y];
+        } else {
+          Mat.M[x][y] = N.M[x-n][y];
+        }
       }
     }
     return Mat;
+  }
+
+  Matrix cutRight(int L) {
+    int l = max(min(L, n), 0);
+    if (l == n || l == 0) {
+      return this;
+    }
+    Matrix Mat = new Matrix(m, l);
+    for (int i = 0; i < m*l; i++) {
+      Mat.M[i%l][i/l] = M[n-l+(i%l)][i/l];
+    }
+    return Mat;
+  }
+  Matrix cutLeft(int L) {
+    int l = max(min(L, n), 0);
+    if (l == n || l == 0) {
+      return this;
+    }
+    Matrix Mat = new Matrix(m, l);
+    for (int i = 0; i < m*l; i++) {
+      Mat.M[i%l][i/l] = M[i%l][i/l];
+    }
+    return Mat;
+  }
+
+  Matrix O() {
+    Matrix N = new Matrix(m, n);
+    return N;
+  }
+
+  void setO() {
+    Matrix N = new Matrix(m, n);
+    this.M = N.M;
+  }
+
+  Matrix rnd() {
+    return rnd(false);
+  }
+  Matrix rnd(boolean roundClose) {
+    Matrix Mat = new Matrix(m, n);
+    double f = 0;
+    for (int i = 0; i < m*n; i++) {
+      if (roundClose) {
+        f = M[i%n][i/n];
+        if (abs(round(f)-f)<0.001) {
+          Mat.M[i%n][i/n] = round(f);
+        } else {
+          Mat.M[i%n][i/n] = f;
+        }
+      } else {
+        Mat.M[i%n][i/n] = round(M[i%n][i/n]);
+      }
+    }
+    return Mat;
+  }
+
+  Matrix ab() {
+    Matrix Mat = new Matrix(m, n);
+    for (int i = 0; i < m*n; i++) {
+      Mat.M[i%n][i/n] = abs(M[i%n][i/n]);
+    }
+    return Mat;
+  }
+
+  String deci() {
+    String str = "[";
+    for (int i = 0; i<m*n; i++) {
+      if (i != 0 && i%n == 0) {
+        str += "\n  "+(M[0][i/n]);
+      } else {
+        str += " "+(M[i%n][i/n]);
+      }
+    }
+    str+="]";
+    return str;
+  }
+
+  Matrix ratl() {
+    Matrix Mat = new Matrix(m, n);
+    for (int i = 0; i<m*n; i++) {
+      Mat.M[i%n][i/n] = rational(M[i%n][i/n]);
+    }
+    return Mat;
+  }
+
+  String toString() {
+    String str = "[";
+    for (int i = 0; i<m*n; i++) {
+      if (i != 0 && i%n == 0) {
+        str += "\n  "+rationalize(M[0][i/n]);
+      } else {
+        str += " "+rationalize(M[i%n][i/n]);
+      }
+    }
+    str+="]";
+    return str;
+  }
+}
+
+Matrix buildRows(Vector... vs) {
+  Matrix Mat = new Matrix(vs.length, vs[0].n);
+  for (int i = 0; i<Mat.m*Mat.n; i++) {
+    Mat.M[i%Mat.n][i/Mat.n] = vs[i/Mat.n].el(i%Mat.n);
+  }
+  return Mat;
+}
+
+Matrix buildCols(Vector... vs) {
+  Matrix Mat = new Matrix(vs[0].n, vs.length);
+  for (int i = 0; i<Mat.m*Mat.n; i++) {
+    Mat.M[i/Mat.n][i%Mat.n] = vs[i/Mat.n].el(i%Mat.n);
+  }
+  return Mat;
+}
+class Matrix {
+  // note: [n][m] for m x n matrix
+  double[][] M;
+  int m, n;
+
+  Matrix(int m, int n) {
+    M = new double[n][m];
+    this.m = m;
+    this.n = n;
+  }
+
+  Matrix(int m) {
+    M = new double[m][m];
+    this.m = m;
+    this.n = m;
+  }
+
+  Matrix() {
+    M = new double[1][1];
+    this.m = 1;
+    this.n = 1;
+  }
+
+  boolean isSquare() {
+    return m == n;
+  }
+
+  void chgDim(int dN, int dM) {
+    if (dN>=1 && dM>=1) { 
+      double[][] newM = new double[dN][dM];
+      for (int i = 0; i<min(this.n, dN); i++) {
+        for (int j = 0; j<min(this.m, dM); j++) {
+          newM[i][j] = this.M[i][j];
+        }
+      }
+      this.M = newM;
+      this.n = dN;
+      this.m = dM;
+    }
+  }
+
+  Matrix Copy() {
+    Matrix Mat = new Matrix(m, n);
+    for (int i = 0; i<m*n; i++) {
+      Mat.M[i%n][i/n] = M[i%n][i/n];
+    }
+    return Mat;
+  }
+
+  IMatrix cast() {
+    IMatrix I = new IMatrix(m, n);
+    for (int i = 0; i<m*n; i++) {
+      I.M[i%n][i/n] = M[i%n][i/n];
+    }
+    return I;
+  }
+
+  double get(int i) {
+    if (i >=0 && i<n*m) {
+      return M[i%n][i/n];
+    }
+    return 0;
+  }
+
+  void set(int i, double val) {
+    if (i >=0 && i<n*m) {
+      M[i%n][i/n] = val;
+    }
+  }
+
+  void load(double... nums) {
+    for (int i = 0; i < min(m*n, nums.length); i++) {
+      M[i%n][i/n] = nums[i];
+    }
+  }
+
+  void randInt(int n1) {
+    for (int i = 0; i < m*n; i++) {
+      M[i%n][i/n] = floor(random(n1+1));
+    }
+  }
+  void randInt(int n1, int n2) {
+    for (int i = 0; i < m*n; i++) {
+      M[i%n][i/n] = int(random(n1, n2+1));
+    }
+  }
+  void rand(double f) {
+    for (int i = 0; i < m*n; i++) {
+      M[i%n][i/n] = random(f);
+    }
+  }
+  void rand(int f1, int f2) {
+    for (int i = 0; i < m*n; i++) {
+      M[i%n][i/n] = random(f1, f2);
+    }
+  }
+
+  Matrix scl(double f) {
+    Matrix Mat = new Matrix(m, n);
+    for (int j = 0; j<m*n; j++) {
+      Mat.M[j%n][j/n] = f*M[j%n][j/n];
+    }
+    return Mat;
+  }
+  void Scl(double f) {
+    for (int j = 0; j<m*n; j++) {
+      M[j%n][j/n] = f*M[j%n][j/n];
+    }
+  }
+
+  Vector mult(double... fs) {
+    Vector v = new Vector(fs);
+    return this.mult(v);
+  }
+
+  Matrix mult(Matrix M_) {
+    double sum = 0;
+    if (M_.m == n) {
+      Matrix Mat = new Matrix(m, M_.n);
+      for (int j = 0; j<m*M_.n; j++) {
+        sum = 0;
+        for (int l = 0; l < n; l++) {
+          sum += this.M[l][j/M_.n]*M_.M[j%M_.n][l];
+        }
+        Mat.M[j%M_.n][j/M_.n] = sum;
+      }
+      return Mat;
+    } else {
+      //println("WRONG DIMENSIONS");
+      return O();
+    }
+  }
+
+  Matrix div(Matrix M_) {
+    return mult(M_.inv());
+  }
+
+  Vector mult(Vector v) {
+    return new Vector(this.mult(v.V));
+  }
+
+  Matrix add(Matrix M_) {
+    if (m!=M_.m || n!=M_.n) {
+      println("WRONG DIMENSIONS");
+      return O();
+    }
+    Matrix N = this;
+    for (int i = 0; i<m*n; i++) {
+      N.M[i/m][i%m] += M_.M[i/m][i%m];
+    }
+    return N;
+  }
+
+  Matrix sub(Matrix M_) {
+    if (m!=M_.m || n!=M_.n) {
+      //println("WRONG DIMENSIONS");
+      return O();
+    }
+    Matrix N = this;
+    for (int i = 0; i<m*n; i++) {
+      N.M[i/m][i%m] -= M_.M[i/m][i%m];
+    }
+    return N;
+  }
+
+  boolean singular() {
+    return det() == 0;
+  }
+
+  boolean invertible() {
+    return det() != 0;
+  }
+
+  Matrix upTri() {
+    return upTri(false);
+  }  
+  Matrix upTri(boolean detPreserving) {
+    Matrix Mat = Copy();
+    int x = 0, y = 0, ct = 0;
+    while (x<n && y<m && ct<m) {
+      //CREATE UPPER TRIANGULAR MATRIX VIA ROW OPERATIONS
+      if (Mat.M[x][y] == 0) {
+        y++;
+        if (y==m) {
+          x++;
+          y = ct;
+        }
+      } else if (y <= ct) {
+        ct++;
+        for (int i = y+1; i<m; i++) {
+          Mat.rComb(i, y, -Mat.M[x][i]*1.0/Mat.M[x][y]);
+        }
+        x++;
+        y = ct;
+      } else {
+        Mat.rSwap(ct, y);
+        if (detPreserving) {
+          Mat.rScl(ct, -1);
+        }
+        y = ct;
+      }
+    }
+    return Mat.add(O());
   }
   Matrix ref() {
     Matrix Mat = Copy();
