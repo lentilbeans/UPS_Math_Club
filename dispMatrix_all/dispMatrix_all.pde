@@ -1,12 +1,12 @@
 /**
 Author: Quintin Lenti
-Version: 1.0
+Version: 1.5
 **/
 
 MatrixSet MS;
 IMatrix A, mult;
 int selectedTL = -1, selectedTR = -1, 
-  selectedBR = -1, selectedBL = -1, 
+  selectedBR = -1, selectedBL = -1,
   selectedRes = -1;
 int[] indexSet = {-1, -1};
 boolean elementSelect;
@@ -67,6 +67,20 @@ void keyPressed() {
       MS.get(k).expDown();
     }
   }
+  
+  if(key == 'j') {
+    int k = MS.detectOver();
+    if (k > -1) {
+      MS.scaleInvDet(k);
+    }
+  }
+  
+  if(key == 'm') {
+    int[] k = MS.detectElement();
+    if (k[0] > -1) {
+      MS.addMinor();
+    }
+  }
 
   if (keyCode == DELETE || (keyCode == BACKSPACE && !elementSelect)) {
     int k = MS.detectOver();
@@ -108,6 +122,25 @@ void keyPressed() {
   }
 
   if (elementSelect && ((keyCode>=45 && keyCode<58) || keyCode == 88)) {
+    if (keyCode == 46) {
+      if (IN.indexOf(".") == -1) {
+        IN += ".";
+      }
+    } else if (keyCode == 45) {
+      if (!IN.equals("")) {
+        if (IN.substring(0, 1).equals("-")) {
+          IN = IN.substring(1);
+        } else {
+          IN = "-"+IN;
+        }
+      }
+    } else if (keyCode == 88) {
+      IN += "*";
+    } else {
+      IN += ""+char(keyCode);
+    }
+  }
+  if (!elementSelect && ((keyCode>=45 && keyCode<58) || keyCode == 88)) {
     if (keyCode == 46) {
       if (IN.indexOf(".") == -1) {
         IN += ".";
@@ -215,7 +248,6 @@ void reInit() {
 }
 
 //////////////////////////////////////////////////////////////////////////
-
 class IMatrix extends Matrix {
   float posX, posY, wid, hgt;
   final float BRACKET = height*0.008;
@@ -622,7 +654,6 @@ class IMatrix extends Matrix {
 }
 
 //////////////////////////////////////////////////////////////////////////
-
 class Matrix {
   // note: [n][m] for m x n matrix
   double[][] M;
@@ -699,6 +730,34 @@ class Matrix {
     }
   }
 
+  Matrix minor(int num) {
+    return minor(num%n, num/n);
+  }
+  Matrix minor(int i, int j) {
+    if (0 <= i && 0 <= j && i < n && j < m && m > 1 && n > 1) {
+      Matrix Mat = new Matrix(m-1, n-1);
+      for (int r = 0; r<(m-1); r++) {
+        for (int l = 0; l<(n-1); l++) {
+          if (r < j) {
+            if (l < i) {
+              Mat.M[l][r] = M[l][r];
+            } else {
+              Mat.M[l][r] = M[l+1][r];
+            }
+          } else {
+            if (l < i) {
+              Mat.M[l][r] = M[l][r+1];
+            } else {
+              Mat.M[l][r] = M[l+1][r+1];
+            }
+          }
+        }
+      }
+      return Mat;
+    }
+    return O();
+  }
+
   void randInt(int n1) {
     for (int i = 0; i < m*n; i++) {
       M[i%n][i/n] = floor(random(n1+1));
@@ -769,7 +828,7 @@ class Matrix {
       println("WRONG DIMENSIONS");
       return O();
     }
-    Matrix N = this;
+    Matrix N = this.Copy();
     for (int i = 0; i<m*n; i++) {
       N.M[i/m][i%m] += M_.M[i/m][i%m];
     }
@@ -781,7 +840,7 @@ class Matrix {
       //println("WRONG DIMENSIONS");
       return O();
     }
-    Matrix N = this;
+    Matrix N = this.Copy();
     for (int i = 0; i<m*n; i++) {
       N.M[i/m][i%m] -= M_.M[i/m][i%m];
     }
@@ -946,6 +1005,23 @@ class Matrix {
         return 0;
       }
       return round(10000*D)/10000.0;
+    } else {
+      //println("NOT SQUARE -> DETERMINANT UNDEFINED");
+      return 0;
+    }
+  }
+
+  double Det() {
+    if (isSquare()) {
+      Matrix Mat = upTri(true);
+      double D = 1;
+      for (int i = 0; i<n; i++) {
+        D *= Mat.M[i][i];
+      }
+      if (D==0) {
+        return 0;
+      }
+      return D;
     } else {
       //println("NOT SQUARE -> DETERMINANT UNDEFINED");
       return 0;
@@ -1150,7 +1226,6 @@ Matrix buildCols(Vector... vs) {
 }
 
 //////////////////////////////////////////////////////////////////////////
-
 class MatrixSet {
   final float MATRIX_SPACE = height*0.07;
   IMatrix[] item = new IMatrix[0];
@@ -1356,6 +1431,15 @@ class MatrixSet {
     return OUT;
   }
 
+  void addMinor() {
+    int[] k = detectElement();
+    if(k[0] > -1) {
+      IMatrix I = item[k[0]];
+      add(I.minor(k[1]));
+      item[length-1].setPos(item[k[0]],item[k[0]].n);
+    }
+  }
+
   int readyToOp() {
     int i = 0;
     while (i<length) {
@@ -1389,6 +1473,15 @@ class MatrixSet {
     }
   }
   
+  void scaleInvDet(int i) {
+    if(i < length && i >= 0) {
+      double c = item[i].Det();
+      if(abs(c) > 0 && abs(c) < 1.0) {
+        item[i].Scl(1.0/c);
+      }
+    }
+  }
+  
   void ratl() {
     for(int i = 0; i<length; i++) {
       item[i].ratl();
@@ -1397,7 +1490,6 @@ class MatrixSet {
 }
 
 //////////////////////////////////////////////////////////////////////////
-
 String rationalize(double f) {
   int largestDen = 10000;
   double bound = 0.00005;
@@ -1510,7 +1602,6 @@ boolean contains(String str, String[] strs) {
 }
 
 //////////////////////////////////////////////////////////////////////////
-
 class Vector {
   int n;
   Matrix V;
